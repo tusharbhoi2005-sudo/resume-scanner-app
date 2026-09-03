@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Resume Screener</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Include PDF.js for parsing PDFs in browser -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- Include Mammoth.js for parsing Word documents -->
+    <script src="https://unpkg.com/mammoth@1.4.21/mammoth.browser.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>AI Resume Screener</h1>
+            <p>Smart, client-side offline parsing to find your perfect candidate</p>
+        </header>
+
+        <section class="screening-workspace">
+            <div class="input-panel card">
+                <form id="screener-form">
+                    <div class="form-group">
+                        <label for="job-description">Job Description</label>
+                        <textarea id="job-description" name="job_description" placeholder="Paste the job description here... (e.g. Seeking a software engineer with Python and React experience)" required></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Upload Resumes (PDF via Drag & Drop or Click)</label>
+                        <div class="file-upload-wrapper" id="drop-zone">
+                            <input type="file" id="resumes" name="resumes" accept=".pdf,.docx"  multiple required>
+                            <div class="upload-content">
+                                <span class="upload-icon">📄</span>
+                                <div>Drag & Drop PDFs or Word documents here or <span class="highlight">Browse</span></div>
+                            </div>
+                        </div>
+                        <div id="file-list" class="file-list"></div>
+                    </div>
+
+                    <button type="submit" class="btn-primary" id="submit-btn">
+                        <span class="btn-text">Screen Candidates</span>
+                    </button>
+                </form>
+            </div>
+            
+            <div class="results-panel card">
+                <h2>Ranked Candidates</h2>
+                <div id="results-container" class="results-container">
+                    <div class="empty-state">
+                        <p>Upload resumes and provide a job description to see results here.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Include purely client-side script -->
+    <script src="script.js"></script>
+</body>
+</html>
