@@ -1,7 +1,7 @@
-# AI Resume Screener
+# Resume Screener
 
 ## Overview
-AI Resume Screener is a smart, client-side offline web application designed to help recruiters and hiring managers quickly find the perfect candidate. By leveraging TF-IDF and Cosine Similarity algorithms entirely within the browser, it securely ranks uploaded resumes against a provided job description without ever sending sensitive user data to an external server [cite: 1, 2].
+ Resume Screener is a smart, client-side offline web application designed to help recruiters and hiring managers quickly find the perfect candidate. By leveraging TF-IDF and Cosine Similarity algorithms entirely within the browser, it securely ranks uploaded resumes against a provided job description without ever sending sensitive user data to an external server [cite: 1, 2].
 
 ## Features
 * **Privacy-First Client-Side Processing**: All resume parsing and text analysis happen directly in your browser. No resumes are uploaded to a server [cite: 1].
