@@ -1,8 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // We intentionally do not set workerSrc here. 
-    // When running via local file://, cross-origin workers are blocked. 
-    // Omitting this allows pdf.js to fall back to the main thread securely.
-
     const dropZone = document.getElementById('drop-zone');
     const fileInput = document.getElementById('resumes');
     const fileList = document.getElementById('file-list');
@@ -13,8 +9,26 @@ document.addEventListener('DOMContentLoaded', () => {
     
     let uploadedFiles = [];
 
-    // Stop words
-    const stopWords = new Set(["a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "he", "in", "is", "it", "its", "of", "on", "that", "the", "to", "was", "were", "will", "with", "this", "which", "or", "an", "your"]);
+    // Expanded stop words list covering common English prepositions, pronouns, conjunctions, and auxiliaries
+    const stopWords = new Set([
+        "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", 
+        "aren't", "as", "at", "be", "because", "been", "before", "being", "below", "between", "both", 
+        "but", "by", "can", "cannot", "could", "couldn't", "did", "didn't", "do", "does", "doesn't", 
+        "doing", "don't", "down", "during", "each", "few", "for", "from", "further", "had", "hadn't", 
+        "has", "hasn't", "have", "haven't", "having", "he", "he'd", "he'll", "he's", "her", "here", 
+        "here's", "hers", "herself", "him", "himself", "his", "how", "how's", "i", "i'd", "i'll", 
+        "i'm", "i've", "if", "in", "into", "is", "isn't", "it", "it's", "its", "itself", "let's", 
+        "me", "more", "most", "mustn't", "my", "myself", "no", "nor", "not", "of", "off", "on", 
+        "once", "only", "or", "other", "ought", "our", "ours", "ourselves", "out", "over", "own", 
+        "same", "shan't", "she", "she'd", "she'll", "she's", "should", "shouldn't", "so", "some", 
+        "such", "than", "that", "that's", "the", "their", "theirs", "them", "themselves", "then", 
+        "there", "there's", "these", "they", "they'd", "they'll", "they're", "they've", "this", 
+        "those", "through", "to", "too", "under", "until", "up", "very", "was", "wasn't", "we", 
+        "we'd", "we'll", "we're", "we've", "were", "weren't", "what", "what's", "when", "when's", 
+        "where", "where's", "which", "while", "who", "who's", "whom", "why", "why's", "with", 
+        "won't", "would", "wouldn't", "you", "you'd", "you'll", "you're", "you've", "your", 
+        "yours", "yourself", "yourselves"
+    ]);
 
     // Handle Drag & Drop
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -27,22 +41,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     ['dragenter', 'dragover'].forEach(eventName => {
-        dropZone.addEventListener(eventName, () => {
-            dropZone.classList.add('dragover');
-        }, false);
+        dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
     });
 
     ['dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, () => {
-            dropZone.classList.remove('dragover');
-        }, false);
+        dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
     });
 
     dropZone.addEventListener('drop', (e) => {
-        let dt = e.dataTransfer;
-        let files = dt.files;
-        handleFiles(files);
-        fileInput.files = files;
+        const dt = e.dataTransfer;
+        handleFiles(dt.files);
+        fileInput.files = dt.files;
     });
 
     fileInput.addEventListener('change', function() {
@@ -51,7 +60,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleFiles(files) {
         fileList.innerHTML = '';
-        uploadedFiles = Array.from(files).filter(f => (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) || (f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || f.name.toLowerCase().endsWith('.docx')));
+        uploadedFiles = Array.from(files).filter(f => 
+            f.type === 'application/pdf' || 
+            f.name.toLowerCase().endsWith('.pdf') || 
+            f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
+            f.name.toLowerCase().endsWith('.docx')
+        );
         
         if (uploadedFiles.length > 0) {
             uploadedFiles.forEach(file => {
@@ -61,21 +75,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 fileList.appendChild(fileItem);
             });
         } else {
-            fileList.innerHTML = '<div class="error-message">Please select only PDF or Word files.</div>';
+            fileList.innerHTML = '<div class="error-message">Please select only PDF (.pdf) or Word (.docx) files.</div>';
         }
     }
+
+    // Helper to yield control back to the UI thread
+    const yieldToMain = () => new Promise(resolve => setTimeout(resolve, 0));
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         
         const jobDesc = document.getElementById('job-description').value;
         
-        if(!jobDesc.trim()) {
+        if (!jobDesc.trim()) {
             showError('Please enter a job description.');
             return;
         }
         
-        if(uploadedFiles.length === 0) {
+        if (uploadedFiles.length === 0) {
             showError('Please upload at least one resume (PDF or Word).');
             return;
         }
@@ -83,21 +100,30 @@ document.addEventListener('DOMContentLoaded', () => {
         setLoading(true);
 
         try {
-            resultsContainer.innerHTML = '<div class="empty-state"><p>Extracting text from files...</p></div>';
-            const resumesData = await Promise.all(uploadedFiles.map(async (file) => {
-                const text = await extractTextFromFile(file);
-                return { filename: file.name, text: text };
-            }));
-
-            resultsContainer.innerHTML = '<div class="empty-state"><p>Analyzing and ranking matches...</p></div>';
+            const resumesData = [];
             
-            // Check if parsing worked
+            for (let i = 0; i < uploadedFiles.length; i++) {
+                const file = uploadedFiles[i];
+                resultsContainer.innerHTML = `
+                    <div class="empty-state">
+                        <p>Parsing document ${i + 1} of ${uploadedFiles.length}: <strong>${file.name}</strong></p>
+                    </div>
+                `;
+                await yieldToMain();
+                
+                const text = await extractTextFromFile(file);
+                resumesData.push({ filename: file.name, text });
+            }
+
+            resultsContainer.innerHTML = '<div class="empty-state"><p>Vectorizing terms and computing candidate rankings...</p></div>';
+            await yieldToMain();
+
             const validResumes = resumesData.filter(r => r.text && r.text.length > 0);
             if (validResumes.length === 0) {
                 throw new Error("Could not extract any readable text from the provided files.");
             }
 
-            const results = rankResumesCustom(jobDesc, validResumes);
+            const results = await rankResumesCustom(jobDesc, validResumes);
             renderResults(results);
             
         } catch (error) {
@@ -108,7 +134,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- File text extraction ---
+    // --- Document Parsers ---
     async function extractTextFromFile(file) {
         const fileName = file.name.toLowerCase();
         const arrayBuffer = await file.arrayBuffer();
@@ -142,7 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function extractTextFromDocx(arrayBuffer, fileName) {
         try {
-            const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+            const result = await mammoth.extractRawText({ arrayBuffer });
             return result.value.trim();
         } catch(e) {
             console.error(`Failed to parse Word document ${fileName}:`, e);
@@ -150,28 +176,57 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- TF-IDF and Cosine Similarity Logic ---
+    // --- Tokenizer with Skill Character Preservation & Bigram Support ---
     function tokenize(text) {
-        return text.toLowerCase()
-            .replace(/[^a-z0-9\s]/g, ' ')
-            .split(/\s+/)
-            .filter(w => w.length > 2 && !stopWords.has(w));
+        const cleaned = text.toLowerCase()
+            // Clean trailing/leading quotes, brackets, and structural delimiters while preserving #, +, ., /
+            .replace(/[()\[\]{}"',;:!?]/g, ' ')
+            .replace(/\s+/g, ' ');
+
+        // Matches valid tokens including tech terms like c++, c#, .net, node.js, ci/cd, tcp/ip
+        const tokenRegex = /(?:\.?[a-z0-9]+(?:[\.\+\#\/\-_][a-z0-9]+)*[\+\#]*)/g;
+        const matches = cleaned.match(tokenRegex) || [];
+
+        const unigrams = [];
+        for (let token of matches) {
+            // Trim leading/trailing isolated periods or hyphens
+            token = token.replace(/^[\.\-_]+|[\.\-_]+$/g, '');
+            if (token.length > 1 && !stopWords.has(token)) {
+                unigrams.push(token);
+            }
+        }
+
+        // Generate Bigrams (e.g., "software_engineer", "machine_learning")
+        const ngrams = [...unigrams];
+        for (let i = 0; i < unigrams.length - 1; i++) {
+            ngrams.push(`${unigrams[i]}_${unigrams[i + 1]}`);
+        }
+
+        return ngrams;
     }
 
+    // Sub-linear Term Frequency: reduces the impact of repeated keyword stuffing
     function calculateTF(tokens) {
-        const tf = {};
+        const rawCounts = {};
         for (const token of tokens) {
-            tf[token] = (tf[token] || 0) + 1;
+            rawCounts[token] = (rawCounts[token] || 0) + 1;
         }
-        // No normalization here to match scikit-learn roughly, or sub-linear TF
+
+        const tf = {};
+        for (const term in rawCounts) {
+            tf[term] = 1 + Math.log(rawCounts[term]);
+        }
         return tf;
     }
 
-    function rankResumesCustom(jobDesc, resumes) {
+    // --- Asynchronous Ranking Engine ---
+    async function rankResumesCustom(jobDesc, resumes) {
         const docs = [jobDesc, ...resumes.map(r => r.text)];
         const docsTokens = docs.map(tokenize);
         
-        // Build document frequencies (DF)
+        await yieldToMain();
+
+        // Calculate Document Frequency (DF)
         const df = {};
         for (const tokens of docsTokens) {
             const uniqueTokens = new Set(tokens);
@@ -183,15 +238,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const N = docs.length;
         const idf = {};
         for (const token in df) {
-            // standard idf formulation with smoothing
+            // Smooth IDF formula
             idf[token] = Math.log((1 + N) / (1 + df[token])) + 1;
         }
 
-        // Vectorize
         const vocab = Object.keys(idf);
+        
+        // Compute L2-normalized TF-IDF vectors
         const vectors = docsTokens.map(tokens => {
             const tf = calculateTF(tokens);
-            const vector = new Array(vocab.length).fill(0);
+            const vector = new Float64Array(vocab.length);
             let normSq = 0;
             
             for (let i = 0; i < vocab.length; i++) {
@@ -203,35 +259,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             
-            // L2 normalize
             const norm = Math.sqrt(normSq);
             if (norm > 0) {
-                for(let i = 0; i < vector.length; i++) {
-                    vector[i] = vector[i] / norm;
+                for (let i = 0; i < vector.length; i++) {
+                    vector[i] /= norm;
                 }
             }
             return vector;
         });
 
+        await yieldToMain();
+
         const jobVec = vectors[0];
         const results = [];
         
-        for(let i = 1; i < vectors.length; i++) {
+        for (let i = 1; i < vectors.length; i++) {
             let similarity = 0;
             const resVec = vectors[i];
             
-            for(let j = 0; j < vocab.length; j++) {
+            for (let j = 0; j < vocab.length; j++) {
                 similarity += jobVec[j] * resVec[j];
             }
             
-            // similarity is already a cosine similarity if vectors are normalized
             results.push({
-                filename: resumes[i-1].filename,
+                filename: resumes[i - 1].filename,
                 score: Math.round(similarity * 100)
             });
         }
         
-        // Sort descending
         return results.sort((a, b) => b.score - a.score);
     }
 
@@ -243,7 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderResults(results) {
         resultsContainer.innerHTML = '';
         
-        if(!results || results.length === 0) {
+        if (!results || results.length === 0) {
             resultsContainer.innerHTML = `
                 <div class="empty-state">
                     <p>No results could be processed.</p>
@@ -258,10 +313,10 @@ document.addEventListener('DOMContentLoaded', () => {
             let matchClass = 'match-low';
             let bgClass = 'bg-low';
             
-            if (score >= 25) { // Adjusted thresholds since raw cosine without ML sometimes scores lower
+            if (score >= 35) {
                 matchClass = 'match-high';
                 bgClass = 'bg-high';
-            } else if (score >= 10) {
+            } else if (score >= 18) {
                 matchClass = 'match-medium';
                 bgClass = 'bg-medium';
             }
